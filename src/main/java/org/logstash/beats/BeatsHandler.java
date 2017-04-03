@@ -12,7 +12,6 @@ import org.apache.logging.log4j.LogManager;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.net.ssl.SSLPeerUnverifiedException;
-import javax.security.cert.X509Certificate;
 import javax.security.auth.x500.X500Principal;
 
 public class BeatsHandler extends SimpleChannelInboundHandler<Batch> {
@@ -90,7 +89,7 @@ public class BeatsHandler extends SimpleChannelInboundHandler<Batch> {
             } else if(e.state() == IdleState.READER_IDLE) {
                 clientTimeout();
             }
-        } else if(event instanceof SslHandshakeCompletionEvent) {
+        } else if(sslHandler != null && event instanceof SslHandshakeCompletionEvent) {
             try {
                 peerDn = sslHandler.engine().getSession().getPeerPrincipal().toString();
                 logger.info("Got peer DN '" + peerDn + "'");
