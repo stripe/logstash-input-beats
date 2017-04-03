@@ -4,6 +4,7 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.ssl.SslHandler;
+import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import org.apache.logging.log4j.LogManager;
@@ -13,12 +14,14 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.security.cert.X509Certificate;
 import javax.security.auth.x500.X500Principal;
 
 public class BeatsHandler extends SimpleChannelInboundHandler<Batch> {
     private final static Logger logger = LogManager.getLogger(BeatsHandler.class);
     private final AtomicBoolean processing = new AtomicBoolean(false);
     private String peerDnField;
+    private String peerDn = null;
     private SslHandler sslHandler;
     private final IMessageListener messageListener;
     private ChannelHandlerContext context;
@@ -57,15 +60,9 @@ public class BeatsHandler extends SimpleChannelInboundHandler<Batch> {
             }
             if (peerDnField != null) {
                 java.util.Map data = message.getData();
-
-                // Remove the field even if it exists to prevent spoofing
-                data.remove(peerDnField);
-                try {
-                    X500Principal principal = (X500Principal)sslHandler.engine().getSession().getPeerPrincipal();
-                    data.put(peerDnField, principal.toString());
-                } catch (SSLPeerUnverifiedException e) {
-                    // This is ok, we've already deleted the DN field
-                }
+                // If the peer has a DN, include that
+                // Otherwise, set the field to be blank
+                data.put(peerDnField, peerDn);
             }
             messageListener.onNewMessage(ctx, message);
 
@@ -100,6 +97,13 @@ public class BeatsHandler extends SimpleChannelInboundHandler<Batch> {
                 sendKeepAlive();
             } else if(e.state() == IdleState.READER_IDLE) {
                 clientTimeout();
+            }
+        } else if(event instanceof SslHandshakeCompletionEvent) {
+            try {
+                peerDn = sslHandler.engine().getSession().getPeerPrincipal().toString();
+                logger.info("Got peer DN '" + peerDn + "'");
+            } catch (SSLPeerUnverifiedException e) {
+                peerDn = "";
             }
         }
     }
