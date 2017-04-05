@@ -95,6 +95,10 @@ class LogStash::Inputs::Beats < LogStash::Inputs::Base
   # This option needs to be used with `ssl_certificate_authorities` and a defined list of CAs.
   config :ssl_verify_mode, :validate => ["none", "peer", "force_peer"], :default => "none"
 
+  # Provide the DN in the client certificate as a field in the log event.
+  # If the field already exists, it is deleted, whether or not a client certificate was received.
+  config :ssl_dn_field, :validate => :string, :default => ""
+
   config :include_codec_tag, :validate => :boolean, :default => true
 
   # Time in milliseconds for an incomplete ssl handshake to timeout
@@ -186,7 +190,7 @@ class LogStash::Inputs::Beats < LogStash::Inputs::Base
         ssl_builder.setCertificateAuthorities(@ssl_certificate_authorities)
       end
 
-      server.enableSSL(ssl_builder)
+      server.enableSSL(ssl_builder, @ssl_dn_field)
     end
 
     server

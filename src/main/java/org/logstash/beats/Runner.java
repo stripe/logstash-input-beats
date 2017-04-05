@@ -34,7 +34,7 @@ public class Runner {
                     .setCertificateAuthorities(certificateAuthorities)
                     .setHandshakeTimeoutMilliseconds(10000);
 
-            server.enableSSL(sslBuilder);
+            server.enableSSL(sslBuilder, null);
         }
 
         server.listen();
