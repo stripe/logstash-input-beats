@@ -92,7 +92,7 @@ public class BeatsHandler extends SimpleChannelInboundHandler<Batch> {
         } else if(sslHandler != null && event instanceof SslHandshakeCompletionEvent) {
             try {
                 peerDn = sslHandler.engine().getSession().getPeerPrincipal().toString();
-                logger.info("Got peer DN '" + peerDn + "'");
+                logger.debug("Got peer DN '" + peerDn + "'");
             } catch (SSLPeerUnverifiedException e) {
                 peerDn = "";
             }
