@@ -3,21 +3,37 @@ package org.logstash.beats;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.handler.ssl.SslHandler;
+import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.security.auth.x500.X500Principal;
 
 public class BeatsHandler extends SimpleChannelInboundHandler<Batch> {
-    private final static Logger logger = Logger.getLogger(BeatsHandler.class);
+    private final static Logger logger = LogManager.getLogger(BeatsHandler.class);
     private final AtomicBoolean processing = new AtomicBoolean(false);
+    private String peerDnField;
+    private String peerDn = null;
+    private SslHandler sslHandler;
     private final IMessageListener messageListener;
     private ChannelHandlerContext context;
 
 
     public BeatsHandler(IMessageListener listener) {
         messageListener = listener;
+    }
+
+    public BeatsHandler(IMessageListener listener, String peerDnField, SslHandler handler) {
+        messageListener = listener;
+	this.peerDnField = peerDnField;
+	sslHandler = handler;
     }
 
     @Override
@@ -41,6 +57,12 @@ public class BeatsHandler extends SimpleChannelInboundHandler<Batch> {
             if(logger.isDebugEnabled()) {
                 logger.debug("Sending a new message for the listener, sequence: " + message.getSequence());
             }
+            if (peerDnField != null) {
+                java.util.Map data = message.getData();
+                // If the peer has a DN, include that
+                // Otherwise, set the field to be blank
+                data.put(peerDnField, peerDn);
+            }
             messageListener.onNewMessage(ctx, message);
 
             if(needAck(message)) {
@@ -54,8 +76,14 @@ public class BeatsHandler extends SimpleChannelInboundHandler<Batch> {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        InetSocketAddress remoteAddress = (InetSocketAddress) ctx.channel().remoteAddress();
+
+        if (remoteAddress != null) {
+            logger.info("Exception: " + cause.getMessage() + ", from: " + remoteAddress.toString());
+        } else {
+            logger.info("Exception: " + cause.getMessage());
+        }
         messageListener.onException(ctx, cause);
-        logger.error("Exception: " + cause.getMessage());
         ctx.close();
     }
 
@@ -68,6 +96,13 @@ public class BeatsHandler extends SimpleChannelInboundHandler<Batch> {
                 sendKeepAlive();
             } else if(e.state() == IdleState.READER_IDLE) {
                 clientTimeout();
+            }
+        } else if(sslHandler != null && event instanceof SslHandshakeCompletionEvent) {
+            try {
+                peerDn = sslHandler.engine().getSession().getPeerPrincipal().toString();
+                logger.debug("Got peer DN '" + peerDn + "'");
+            } catch (SSLPeerUnverifiedException e) {
+                peerDn = "";
             }
         }
     }

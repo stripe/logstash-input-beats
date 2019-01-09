@@ -1,3 +1,31 @@
+## 3.1.24
+ - Documentation changes
+
+## 3.1.23
+ - Fix logging from Java #236
+
+## 3.1.22
+ - Additional default cipher PR#242
+
+## 3.1.21
+ - Remove duplicate jars
+
+## 3.1.20
+ - Document changes
+
+## 3.1.19
+ - Fix ability to set SSL protocols #228
+
+## 3.1.18
+ - Relax version of concurrent-ruby to `~> 1.0`
+
+## 3.1.17
+ - Docs: Add note indicating that the multiline codec should not be used with the Beats input plugin
+ - Deprecate warning for multiline codec with the Beats input plugin
+
+## 3.1.15
+ - DEBUG: Add information about the remote when an exception is catched #192
+
 ## 3.1.14
  - Fix: Make sure idle connection are correctly close for the right client, #185, #178
  - Fix: remoge string interpolation for logging in critical path #184

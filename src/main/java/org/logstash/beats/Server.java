@@ -11,7 +11,8 @@ import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
 import io.netty.util.concurrent.Future;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.logstash.netty.SslSimpleBuilder;
 
 import java.io.IOException;
@@ -22,7 +23,7 @@ import java.util.concurrent.TimeUnit;
 
 
 public class Server {
-    private final static Logger logger = Logger.getLogger(Server.class);
+    private final static Logger logger = LogManager.getLogger(Server.class);
 
     private static final int DEFAULT_CLIENT_TIMEOUT_SECONDS = 15;
 
@@ -32,6 +33,7 @@ public class Server {
     private final String host;
     private IMessageListener messageListener = new MessageListener();
     private SslSimpleBuilder sslBuilder;
+    private String peerDnField;
 
     private final int clientInactivityTimeoutSeconds;
 
@@ -47,8 +49,9 @@ public class Server {
         workGroup = new NioEventLoopGroup();
     }
 
-    public void enableSSL(SslSimpleBuilder builder) {
+    public void enableSSL(SslSimpleBuilder builder, String peerDnField) {
         sslBuilder = builder;
+        this.peerDnField = peerDnField;
     }
 
     public Server listen() throws InterruptedException {
@@ -57,7 +60,7 @@ public class Server {
         try {
             logger.info("Starting server on port: " +  this.port);
 
-            beatsInitializer = new BeatsInitializer(isSslEnable(), messageListener, clientInactivityTimeoutSeconds);
+            beatsInitializer = new BeatsInitializer(isSslEnable(), messageListener, clientInactivityTimeoutSeconds, peerDnField);
 
             ServerBootstrap server = new ServerBootstrap();
             server.group(bossGroup, workGroup)
@@ -112,9 +115,11 @@ public class Server {
 
 
         private boolean enableSSL = false;
+        private String peerDnField;
 
-        public BeatsInitializer(Boolean secure, IMessageListener messageListener, int clientInactivityTimeoutSeconds) {
+        public BeatsInitializer(Boolean secure, IMessageListener messageListener, int clientInactivityTimeoutSeconds, String peerDnField) {
             enableSSL = secure;
+            this.peerDnField = peerDnField;
             this.message = messageListener;
             this.clientInactivityTimeoutSeconds = clientInactivityTimeoutSeconds;
             idleExecutorGroup = new DefaultEventExecutorGroup(DEFAULT_IDLESTATEHANDLER_THREAD);
@@ -125,8 +130,9 @@ public class Server {
 
             pipeline.addLast(LOGGER_HANDLER, loggingHandler);
 
+            SslHandler sslHandler = null;
             if(enableSSL) {
-                SslHandler sslHandler = sslBuilder.build(socket.alloc());
+                sslHandler = sslBuilder.build(socket.alloc());
                 pipeline.addLast(SSL_HANDLER, sslHandler);
             }
 
@@ -136,7 +142,11 @@ public class Server {
 
             pipeline.addLast(BEATS_PARSER, new BeatsParser());
             pipeline.addLast(BEATS_ACKER, new AckEncoder());
-            pipeline.addLast(BEATS_HANDLER, new BeatsHandler(this.message));
+            if (enableSSL && peerDnField != null && !peerDnField.isEmpty()) {
+                pipeline.addLast(BEATS_HANDLER, new BeatsHandler(this.message, peerDnField, sslHandler));
+            } else {
+                pipeline.addLast(BEATS_HANDLER, new BeatsHandler(this.message));
+            }
 
         }
 

@@ -37,6 +37,12 @@ require_relative "beats/patch"
 # a setting for the <<plugins-inputs-beats-type,`type`>> config option in
 # Logstash, it is ignored.
 #
+# IMPORTANT: If you are shipping events that span multiple lines, you need to
+# use the configuration options available in Filebeat to handle multiline events
+# before sending the event data to Logstash. You cannot use the
+# <<plugins-codecs-multiline>> codec to handle multiline events. Doing so may
+# result in the mixing of streams and corrupted event data. 
+#
 class LogStash::Inputs::Beats < LogStash::Inputs::Base
   require "logstash/inputs/beats/codec_callback_listener"
   require "logstash/inputs/beats/event_transform_common"
@@ -88,6 +94,10 @@ class LogStash::Inputs::Beats < LogStash::Inputs::Base
   #
   # This option needs to be used with `ssl_certificate_authorities` and a defined list of CAs.
   config :ssl_verify_mode, :validate => ["none", "peer", "force_peer"], :default => "none"
+
+  # Provide the DN in the client certificate as a field in the log event.
+  # If the field already exists, it is deleted, whether or not a client certificate was received.
+  config :ssl_dn_field, :validate => :string, :default => ""
 
   config :include_codec_tag, :validate => :boolean, :default => true
 
@@ -141,6 +151,10 @@ class LogStash::Inputs::Beats < LogStash::Inputs::Base
       raise LogStash::ConfigurationError, "Using `verify_mode` set to PEER or FORCE_PEER, requires the configuration of `certificate_authorities`"
     end
 
+    if @codec.kind_of? LogStash::Codecs::Multiline
+      @logger.warn("WARNING! - Multiline codec with beats input has been deprecated. Support for this configuration will be removed in a future version. Please refer to the beats documentation for how to best manage multiline data. See https://www.elastic.co/guide/en/beats/filebeat/current/multiline-examples.html")
+    end
+
     @logger.info("Beats inputs: Starting input listener", :address => "#{@host}:#{@port}")
 
     # wrap the configured codec to support identity stream
@@ -176,7 +190,7 @@ class LogStash::Inputs::Beats < LogStash::Inputs::Base
         ssl_builder.setCertificateAuthorities(@ssl_certificate_authorities)
       end
 
-      server.enableSSL(ssl_builder)
+      server.enableSSL(ssl_builder, @ssl_dn_field)
     end
 
     server
